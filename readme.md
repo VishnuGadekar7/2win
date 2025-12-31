@@ -15,7 +15,7 @@
 ## 📱 **DAY 1 and 2 : Monorepo + Basic Servers** 
 | Member | Tasks | Success Metric |
 |--------|-------|----------------|
-| **Saharsh** | GitHub repo + Railway account | Repo created |
+| **vishnu** | GitHub repo + Railway account | Repo created | 
 | **Harsh** | Backend FastAPI `/health` | `localhost:8000/health` ✅ |
 | **Vishnu** | Frontend Next.js login | `localhost:3000/login` ✅ |
 | **Atharva** | Download PIMA dataset | `ml/data/pima.csv` (768 rows) |
