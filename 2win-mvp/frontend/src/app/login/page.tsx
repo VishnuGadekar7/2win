@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
-  const API_BASE_URL = "http://localhost:8000"; // Harsh's backend
+  const API_BASE_URL = "https://twowin-8mg4.onrender.com"; // Harsh's backend
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
