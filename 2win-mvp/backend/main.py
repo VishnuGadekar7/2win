@@ -7,9 +7,7 @@ from datetime import datetime, timedelta
 import uuid
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from database import db  # your Supabase DB wrapper
-import os
-import uvicorn
+from database import db  # your Supabase wrapper or DB client
 
 # =======================
 # APP CONFIG
@@ -21,39 +19,42 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# FRONTEND ORIGINS
+# CORS: allow Vercel frontend + local dev
 origins = [
-    "http://localhost:3000",                  # local dev
-    "http://10.166.71.151:3000",             # local network
-    "https://2win-frontend.vercel.app"       # deployed frontend
+    "http://localhost:3000",
+    "https://2win-frontend.vercel.app"
 ]
 
-# APPLY CORS MIDDLEWARE FIRST
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
+    expose_headers=["*"]
 )
 
 # =======================
 # SECURITY
 # =======================
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-key")  # use ENV var in production
+SECRET_KEY = "your-secret-key-here"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def get_password_hash(password: str) -> str:
+    if not password:
+        raise ValueError("Password cannot be empty")
+    # bcrypt only supports up to 72 bytes
     truncated = password[:72]
     return pwd_context.hash(truncated)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not plain_password:
+        return False
     truncated = plain_password[:72]
     return pwd_context.verify(truncated, hashed_password)
 
@@ -115,19 +116,31 @@ class UserUpdate(BaseModel):
 async def root():
     return {"message": "2win Backend LIVE ✅"}
 
+# -------- REGISTER --------
 @app.post("/auth/register", response_model=Dict[str, Any])
 async def register_user(user: UserCreate):
+    # Check existing user
     existing_user = await db.get_user_by_email(user.email)
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    # Hash password safely
     hashed_password = get_password_hash(user.password)
+
+    # Build user dict
     user_dict = user.dict()
     user_dict["user_id"] = str(uuid.uuid4())
     user_dict["hashed_password"] = hashed_password
     user_dict["created_at"] = datetime.utcnow().isoformat()
     user_dict["updated_at"] = datetime.utcnow().isoformat()
-    user_dict.pop("password", None)
+    user_dict.pop("password", None)  # remove plain password
+
+    # Optional numeric fields: ensure they are floats/ints or None
+    for field in ["height", "weight"]:
+        if user_dict.get(field) is not None:
+            user_dict[field] = float(user_dict[field])
+    if user_dict.get("age") is not None:
+        user_dict["age"] = int(user_dict["age"])
 
     await db.create_user(user_dict)
 
@@ -144,6 +157,7 @@ async def register_user(user: UserCreate):
         "token_type": "bearer"
     }
 
+# -------- LOGIN --------
 @app.post("/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await db.get_user_by_email(form_data.username)
@@ -156,14 +170,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+# -------- GET CURRENT USER --------
 @app.get("/users/me", response_model=Dict[str, Any])
 async def read_users_me(current_user: Dict = Depends(get_current_user)):
     return current_user
-
-# =======================
-# RUN APP ON RENDER
-# =======================
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))  # Render provides PORT
-    uvicorn.run(app, host="0.0.0.0", port=port)
