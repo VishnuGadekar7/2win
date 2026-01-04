@@ -14,7 +14,9 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
-  const API_BASE_URL = "http://127.0.0.1:8000"; // Harsh's backend
+  const API_BASE_URL = "http://127.0.0.1:8000";
+  const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
+  // Harsh's backend
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +32,7 @@ export default function LoginPage() {
     }
 
     try {
-      console.log('Sending registration request to:', `${API_BASE_URL}/auth/register`);
+      console.log('Sending registration request to:', `${RENDER_API_BASE_URL}/auth/register`);
       const requestBody = {
         email,
         password,
@@ -41,7 +43,7 @@ export default function LoginPage() {
       };
       console.log('Request body:', requestBody);
 
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const response = await fetch(`${RENDER_API_BASE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
