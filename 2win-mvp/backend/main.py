@@ -8,6 +8,8 @@ import uuid
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from database import db  # your Supabase DB wrapper
+import os
+import uvicorn
 
 # =======================
 # APP CONFIG
@@ -19,13 +21,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# FRONTEND ORIGINS
 origins = [
-    "http://localhost:3000",
-    "http://10.166.71.151:3000",
-    "https://2win-frontend.vercel.app"
-      # local network
+    "http://localhost:3000",                  # local dev
+    "http://10.166.71.151:3000",             # local network
+    "https://2win-frontend.vercel.app"       # deployed frontend
 ]
 
+# APPLY CORS MIDDLEWARE FIRST
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -39,15 +42,15 @@ app.add_middleware(
 # SECURITY
 # =======================
 
-SECRET_KEY = "your-secret-key-here"  # change to secure secret
+SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-key")  # use ENV var in production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_password_hash(password: str) -> str:
-    truncated = password[:72]  # bcrypt max length
+    truncated = password[:72]
     return pwd_context.hash(truncated)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -58,8 +61,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -113,7 +115,6 @@ class UserUpdate(BaseModel):
 async def root():
     return {"message": "2win Backend LIVE ✅"}
 
-# -------- REGISTER --------
 @app.post("/auth/register", response_model=Dict[str, Any])
 async def register_user(user: UserCreate):
     existing_user = await db.get_user_by_email(user.email)
@@ -126,11 +127,14 @@ async def register_user(user: UserCreate):
     user_dict["hashed_password"] = hashed_password
     user_dict["created_at"] = datetime.utcnow().isoformat()
     user_dict["updated_at"] = datetime.utcnow().isoformat()
-    user_dict.pop("password", None)  # remove plain password
+    user_dict.pop("password", None)
 
     await db.create_user(user_dict)
 
-    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token = create_access_token(
+        data={"sub": user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
 
     return {
         "id": user_dict["user_id"],
@@ -140,17 +144,26 @@ async def register_user(user: UserCreate):
         "token_type": "bearer"
     }
 
-# -------- LOGIN --------
 @app.post("/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await db.get_user_by_email(form_data.username)
     if not user or not verify_password(form_data.password, user.get("hashed_password")):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
-    access_token = create_access_token(data={"sub": user["email"]}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token = create_access_token(
+        data={"sub": user["email"]},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# -------- GET CURRENT USER --------
 @app.get("/users/me", response_model=Dict[str, Any])
 async def read_users_me(current_user: Dict = Depends(get_current_user)):
     return current_user
+
+# =======================
+# RUN APP ON RENDER
+# =======================
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))  # Render provides PORT
+    uvicorn.run(app, host="0.0.0.0", port=port)
