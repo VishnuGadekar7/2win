@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -19,6 +19,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setStatus(null);
 
     // Basic validation
     if (password.length < 8) {
@@ -30,14 +31,11 @@ export default function LoginPage() {
 
     try {
       // Build request body
-      const requestBody: any = {
-        email,
-        password,
-        name
-      };
-      if (height) requestBody.height = parseFloat(height);
-      if (weight) requestBody.weight = parseFloat(weight);
-      if (age) requestBody.age = parseInt(age);
+      const requestBody: any = { email, password, name };
+
+      if (height !== "") requestBody.height = parseFloat(height);
+      if (weight !== "") requestBody.weight = parseFloat(weight);
+      if (age !== "") requestBody.age = parseInt(age);
 
       console.log("Sending registration request:", requestBody);
 
@@ -47,14 +45,12 @@ export default function LoginPage() {
         body: JSON.stringify(requestBody),
       });
 
-      // Check response
       const data = await response.json();
       console.log("Registration response:", { status: response.status, data });
 
       if (response.ok) {
         setMessage(`✅ Registration successful! Welcome ${data.name}`);
         setStatus("success");
-        // Clear form on successful registration
         setEmail("");
         setPassword("");
         setName("");
@@ -62,7 +58,20 @@ export default function LoginPage() {
         setWeight("");
         setAge("");
       } else {
-        setMessage(data.detail || data.message || "Registration failed");
+        // Convert backend validation errors to readable string
+        let errorMsg = "Registration failed";
+        if (data.detail) {
+          if (Array.isArray(data.detail)) {
+            errorMsg = data.detail
+              .map((err: any) => `${err.loc.join(" > ")}: ${err.msg}`)
+              .join("; ");
+          } else {
+            errorMsg = data.detail;
+          }
+        } else if (data.message) {
+          errorMsg = data.message;
+        }
+        setMessage(errorMsg);
         setStatus("error");
       }
     } catch (error: any) {
@@ -106,6 +115,7 @@ export default function LoginPage() {
               className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
               required
             />
+
             <div className="mt-4">
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Full Name
@@ -119,6 +129,7 @@ export default function LoginPage() {
                 required
               />
             </div>
+
             <div className="mt-4">
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Password
