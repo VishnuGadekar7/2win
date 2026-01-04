@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState } from "react";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -14,9 +13,8 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
-  const API_BASE_URL = "http://127.0.0.1:8000";
+  // ✅ Use your deployed backend URL
   const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
-  // Harsh's backend
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +22,13 @@ export default function LoginPage() {
     setMessage("");
 
     // Basic validation
+    if (!email || !name || !password) {
+      setMessage("Please fill in all required fields");
+      setStatus("error");
+      setLoading(false);
+      return;
+    }
+
     if (password.length < 8) {
       setMessage("Password must be at least 8 characters long");
       setStatus("error");
@@ -32,16 +37,16 @@ export default function LoginPage() {
     }
 
     try {
-      console.log('Sending registration request to:', `${RENDER_API_BASE_URL}/auth/register`);
       const requestBody = {
-        email,
-        password,
-        name,
-        height: height ? parseFloat(height) : null,
-        weight: weight ? parseFloat(weight) : null,
-        age: age ? parseInt(age) : null,
+        email: email,
+        password: password,
+        name: name,
+        height: height !== "" ? parseFloat(height) : null,
+        weight: weight !== "" ? parseFloat(weight) : null,
+        age: age !== "" ? parseInt(age) : null,
       };
-      console.log('Request body:', requestBody);
+
+      console.log("Sending registration request:", requestBody);
 
       const response = await fetch(`${RENDER_API_BASE_URL}/auth/register`, {
         method: "POST",
@@ -50,12 +55,11 @@ export default function LoginPage() {
       });
 
       const data = await response.json();
-      console.log('Registration response:', { status: response.status, data });
+      console.log("Registration response:", { status: response.status, data });
 
       if (response.ok) {
         setMessage(`✅ Registration successful! Welcome ${data.name}`);
         setStatus("success");
-        // Clear form on successful registration
         setEmail("");
         setPassword("");
         setName("");
@@ -67,16 +71,16 @@ export default function LoginPage() {
         setStatus("error");
       }
     } catch (error: any) {
+      console.error("Registration error:", error);
       setMessage("Failed to connect to the server. Please try again later.");
       setStatus("error");
-      console.error("Registration error:", error);
     }
 
     setLoading(false);
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 flex items-center justify-center p-8">
+    <main className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900">
       <div className="w-full max-w-md glass rounded-3xl p-8 shadow-2xl">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-black gradient-text mb-3">2win</h1>
@@ -85,10 +89,11 @@ export default function LoginPage() {
 
         {message && (
           <div
-            className={`p-4 rounded-2xl mb-6 flex items-center space-x-3 ${status === "success"
-              ? "bg-emerald-900/50 border border-emerald-500/50 text-emerald-200"
-              : "bg-red-900/50 border border-red-500/50 text-red-200"
-              }`}
+            className={`p-4 rounded-2xl mb-6 flex items-center space-x-3 ${
+              status === "success"
+                ? "bg-emerald-900/50 border border-emerald-500/50 text-emerald-200"
+                : "bg-red-900/50 border border-red-500/50 text-red-200"
+            }`}
           >
             <span>{message}</span>
           </div>
@@ -104,37 +109,37 @@ export default function LoginPage() {
               placeholder="john@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+              className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               required
             />
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-                placeholder="Enter your full name"
-                required
-              />
-            </div>
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-                placeholder="Enter your password"
-                minLength={8}
-                required
-              />
-              <p className="mt-1 text-xs text-slate-400">Password must be at least 8 characters long</p>
-            </div>
+
+            <label className="block text-sm font-medium text-slate-300 mb-2 mt-4">
+              Full Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter your full name"
+              className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500"
+              required
+            />
+
+            <label className="block text-sm font-medium text-slate-300 mb-2 mt-4">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              minLength={8}
+              className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500"
+              required
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Password must be at least 8 characters long
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -150,6 +155,7 @@ export default function LoginPage() {
                 className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Weight (kg)
@@ -179,18 +185,13 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all text-lg disabled:opacity-50"
             disabled={loading}
+            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all text-lg disabled:opacity-50"
           >
-            {loading ? 'Creating Account...' : 'Get Started'}
+            {loading ? "Creating Account..." : "Get Started"}
           </button>
         </form>
-
-        <p className="text-xs text-slate-500 text-center mt-8">
-          Backend: localhost:8000/health • Day 1 MVP • Team Nodemons
-        </p>
       </div>
     </main>
   );
 }
-
