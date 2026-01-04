@@ -21,7 +21,9 @@ app = FastAPI(
 
 origins = [
     "http://localhost:3000",
-    "http://10.166.71.151:3000",  # local network
+    "http://10.166.71.151:3000",
+    "https://2win-frontend.vercel.app"
+      # local network
 ]
 
 app.add_middleware(
