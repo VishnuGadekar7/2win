@@ -5,6 +5,8 @@ import { useState } from "react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [age, setAge] = useState("");
@@ -12,37 +14,60 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
-  const API_BASE_URL = "https://twowin-8mg4.onrender.com"; // Harsh's backend
+  const API_BASE_URL = "http://127.0.0.1:8000"; // Harsh's backend
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
 
+    // Basic validation
+    if (password.length < 8) {
+      setMessage("Password must be at least 8 characters long");
+      setStatus("error");
+      setLoading(false);
+      return;
+    }
+
     try {
+      console.log('Sending registration request to:', `${API_BASE_URL}/auth/register`);
+      const requestBody = {
+        email,
+        password,
+        name,
+        height: height ? parseFloat(height) : null,
+        weight: weight ? parseFloat(weight) : null,
+        age: age ? parseInt(age) : null,
+      };
+      console.log('Request body:', requestBody);
+
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          height: parseFloat(height) || undefined,
-          weight: parseFloat(weight) || undefined,
-          age: parseInt(age) || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
+      console.log('Registration response:', { status: response.status, data });
 
       if (response.ok) {
-        setMessage(`✅ Registered! User ID: ${data.user_id?.slice(0, 8)}...`);
+        setMessage(`✅ Registration successful! Welcome ${data.name}`);
         setStatus("success");
+        // Clear form on successful registration
+        setEmail("");
+        setPassword("");
+        setName("");
+        setHeight("");
+        setWeight("");
+        setAge("");
       } else {
-        setMessage(data.detail || "Registration failed");
+        setMessage(data.detail || data.message || "Registration failed");
         setStatus("error");
       }
     } catch (error: any) {
-      setMessage("Backend not running? Start: uvicorn main:app");
+      setMessage("Failed to connect to the server. Please try again later.");
       setStatus("error");
+      console.error("Registration error:", error);
     }
 
     setLoading(false);
@@ -80,6 +105,34 @@ export default function LoginPage() {
               className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
               required
             />
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                placeholder="Enter your full name"
+                required
+              />
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                placeholder="Enter your password"
+                minLength={8}
+                required
+              />
+              <p className="mt-1 text-xs text-slate-400">Password must be at least 8 characters long</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
