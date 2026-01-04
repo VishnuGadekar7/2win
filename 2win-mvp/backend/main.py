@@ -1,11 +1,17 @@
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
 import uuid
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from database import db  # your Supabase DB wrapper
 
+# =======================
+# APP CONFIG
+# =======================
 
 app = FastAPI(
     title="2win API 🚀",
@@ -13,66 +19,136 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS for frontend (Vercel + localhost)
+origins = [
+    "http://localhost:3000",
+    "http://10.166.71.151:3000",  # local network
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "https://2win-frontend.vercel.app"
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
-# === DAY 1 ENDPOINTS ===
+# =======================
+# SECURITY
+# =======================
 
-@app.get("/")
-async def root():
-    return {
-        "message": "2win Backend LIVE ✅", 
-        "status": "Week 1 MVP Ready",
-        "endpoints": [
-            "GET /health",
-            "GET /version"
-        ]
-    }
+SECRET_KEY = "your-secret-key-here"  # change to secure secret
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "team": "Nodemons - AISSMS IOIT Pune"
-    }
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-@app.get("/version")
-async def version():
-    return {
-        "backend": "FastAPI 0.104.1",
-        "week": "Week 1 - Login + Database",
-        "next": "Day 2: /auth/register"
-    }
+def get_password_hash(password: str) -> str:
+    truncated = password[:72]  # bcrypt max length
+    return pwd_context.hash(truncated)
 
-# === DAY 2 PREVIEW (Atharva will expand) ===
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    truncated = plain_password[:72]
+    return pwd_context.verify(truncated, hashed_password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = await db.get_user_by_email(email)
+    if user is None:
+        raise credentials_exception
+    return user
+
+# =======================
+# MODELS
+# =======================
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
 class UserBase(BaseModel):
-    email: str
+    email: EmailStr
+    name: str
+    height: Optional[float] = Field(None, gt=0)
+    weight: Optional[float] = Field(None, gt=0)
+    age: Optional[int] = Field(None, gt=0, lt=150)
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=8, max_length=72)
+
+class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    name: Optional[str] = None
     height: Optional[float] = None
     weight: Optional[float] = None
     age: Optional[int] = None
 
-@app.post("/auth/register")
-async def register_preview(user: UserBase):
-    """Day 2: Will connect to PostgreSQL"""
-    user_id = str(uuid.uuid4())
+# =======================
+# ROUTES
+# =======================
+
+@app.get("/")
+async def root():
+    return {"message": "2win Backend LIVE ✅"}
+
+# -------- REGISTER --------
+@app.post("/auth/register", response_model=Dict[str, Any])
+async def register_user(user: UserCreate):
+    existing_user = await db.get_user_by_email(user.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    hashed_password = get_password_hash(user.password)
+    user_dict = user.dict()
+    user_dict["user_id"] = str(uuid.uuid4())
+    user_dict["hashed_password"] = hashed_password
+    user_dict["created_at"] = datetime.utcnow().isoformat()
+    user_dict["updated_at"] = datetime.utcnow().isoformat()
+    user_dict.pop("password", None)  # remove plain password
+
+    await db.create_user(user_dict)
+
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+
     return {
-        "success": True,
-        "user_id": user_id,
-        "message": f"User {user.email} registered (DB coming Day 2)",
-        "demo_mode": True
+        "id": user_dict["user_id"],
+        "email": user.email,
+        "name": user.name,
+        "access_token": access_token,
+        "token_type": "bearer"
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+# -------- LOGIN --------
+@app.post("/auth/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await db.get_user_by_email(form_data.username)
+    if not user or not verify_password(form_data.password, user.get("hashed_password")):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
 
+    access_token = create_access_token(data={"sub": user["email"]}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# -------- GET CURRENT USER --------
+@app.get("/users/me", response_model=Dict[str, Any])
+async def read_users_me(current_user: Dict = Depends(get_current_user)):
+    return current_user
