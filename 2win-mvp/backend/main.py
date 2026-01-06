@@ -22,7 +22,7 @@ app = FastAPI(
 # CORS: allow Vercel frontend + local dev
 origins = [
     "http://localhost:3000",
-    "https://2win-frontend.vercel.app"
+    #"https://2win-frontend.vercel.app"
 ]
 
 app.add_middleware(
