@@ -16,7 +16,7 @@ export default function ProfilePage() {
     age: "",
   });
   const router = useRouter();
-  const RENDER_API_BASE_URL = "http://localhost:8000";
+  const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
 
   useEffect(() => {
     const fetchUserData = async () => {
