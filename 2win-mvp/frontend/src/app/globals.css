@@ -1,25 +1,112 @@
+  @tailwind base;
+  @tailwind components;
+  @tailwind utilities;
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  html {
-    font-family: system-ui, sans-serif;
+  /* Reset and base styles */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
   }
-}
 
-@layer components {
-  .glass {
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  html,
+  body,
+  #__next {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
   }
-  .gradient-text {
-    background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%);
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-  }
-}
 
+  @layer base {
+    :root {
+      /* OpenAI Purple Theme - Perfect match from screenshot */
+      --background: 260 10% 5%;
+      /* hsl(260,10%,5%) ≈ #0C0524 */
+      --foreground: 0 0% 95%;
+      /* hsl(0,0%,95%) ≈ #F0F0F0 */
+      --primary: 260 93% 65%;
+      /* hsl(260,93%,65%) ≈ #8B5CF6 */
+      --primary-foreground: 260 10% 5%;
+      --secondary: 260 100% 9%;
+      /* hsl(260,100%,9%) ≈ #100030 */
+      --secondary-foreground: 0 0% 95%;
+      --muted: 270 13% 50%;
+      /* hsl(270,13%,50%) ≈ #807090 */
+      --muted-foreground: 260 40% 70%;
+      --accent: 0 0% 94%;
+      /* #F0F0F0 */
+      --accent-foreground: 260 10% 5%;
+      --destructive: 0 84% 60%;
+      /* #EF4444 */
+      --destructive-foreground: 0 0% 98%;
+      --border: 260 20% 15%;
+      --input: 260 10% 15%;
+      --ring: 260 93% 65%;
+      --radius: 0.75rem;
+    }
+
+    .dark {
+      /* Already perfect for dark mode */
+    }
+
+    html {
+      font-family: system-ui, -apple-system, sans-serif;
+      scroll-behavior: smooth;
+    }
+  }
+
+  @layer components {
+    /* Fix for Tailwind v4 - Reference required */
+    @reference "tailwindcss";
+
+    /* Perfect OpenAI Purple Glass Morphism */
+    .glass {
+      @apply p-6 rounded-2xl shadow-2xl border backdrop-blur-xl;
+      background: hsl(var(--secondary) / 0.8);
+      border-color: hsl(var(--primary) / 0.3);
+      box-shadow:
+        0 25px 50px hsl(var(--background) / 0.5),
+        inset 0 1px 0 hsl(var(--foreground) / 0.1);
+    }
+
+    .glass:hover {
+      @apply scale-[1.02] active:scale-[0.98];
+      background: hsl(var(--secondary) / 0.9);
+      border-color: hsl(var(--primary) / 0.5);
+      box-shadow:
+        0 35px 70px hsl(var(--background) / 0.7),
+        inset 0 1px 0 hsl(var(--foreground) / 0.15);
+    }
+
+    /* OpenAI Purple Gradient Text */
+    .gradient-text {
+      @apply bg-gradient-to-r bg-clip-text text-transparent font-black;
+      background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(270 70% 70%) 50%, hsl(280 75% 75%) 100%);
+    }
+
+    /* Primary Button */
+    .btn-primary {
+      @apply px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+      color: hsl(var(--primary-foreground));
+      background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(260 80% 55%) 100%);
+      box-shadow: 0 4px 14px hsl(var(--primary) / 0.4);
+    }
+
+    .btn-primary:hover {
+      @apply scale-[1.05];
+      box-shadow: 0 8px 25px hsl(var(--primary) / 0.6);
+    }
+
+    /* Progress bars */
+    .progress-track {
+      @apply h-4 rounded-full overflow-hidden;
+      background-color: hsl(var(--muted) / 0.5);
+    }
+
+    .progress-fill {
+      @apply h-4 rounded-full transition-all duration-1000;
+      background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(270 80% 70%) 100%);
+    }
+  }
