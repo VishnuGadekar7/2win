@@ -14,8 +14,8 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
-  // const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
-  const RENDER_API_BASE_URL = "http://localhost:8000";
+  const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
+  //const RENDER_API_BASE_URL = "http://localhost:8000";
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -7,8 +7,8 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const RENDER_API_BASE_URL = "http://localhost:8000";
-  // const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
+  const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
+  //const RENDER_API_BASE_URL = "http://localhost:8000";
 
   useEffect(() => {
     const fetchUserData = async () => {
