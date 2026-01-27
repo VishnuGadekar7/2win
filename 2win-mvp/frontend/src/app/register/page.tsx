@@ -14,8 +14,8 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
-  //const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
-  const RENDER_API_BASE_URL = "http://localhost:8000";
+  const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
+  //const RENDER_API_BASE_URL = "http://localhost:8000";
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,8 +97,8 @@ export default function RegisterPage() {
         {message && (
           <div
             className={`p-4 rounded-2xl mb-6 flex items-center space-x-3 ${status === "success"
-                ? "bg-emerald-900/50 border border-emerald-500/50 text-emerald-200"
-                : "bg-red-900/50 border border-red-500/50 text-red-200"
+              ? "bg-emerald-900/50 border border-emerald-500/50 text-emerald-200"
+              : "bg-red-900/50 border border-red-500/50 text-red-200"
               }`}
           >
             <span>{message}</span>
