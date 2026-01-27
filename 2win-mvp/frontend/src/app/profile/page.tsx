@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import DeviceManager from "@/components/DeviceManager";
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -16,13 +17,13 @@ export default function ProfilePage() {
     age: "",
   });
   const router = useRouter();
-  const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
-  //const RENDER_API_BASE_URL = "http://localhost:8000";
+  //const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
+  const RENDER_API_BASE_URL = "http://localhost:8000";
 
   useEffect(() => {
     const fetchUserData = async () => {
       const token = localStorage.getItem('token');
-      
+
       if (!token) {
         router.push('/login');
         return;
@@ -37,7 +38,7 @@ export default function ProfilePage() {
         });
 
         if (!response.ok) throw new Error('Failed to fetch user data');
-        
+
         const userData = await response.json();
         setUser(userData);
         setFormData({
@@ -88,7 +89,7 @@ export default function ProfilePage() {
       });
 
       if (!response.ok) throw new Error('Failed to update profile');
-      
+
       const updatedUser = await response.json();
       setUser(updatedUser);
       setEditing(false);
@@ -113,8 +114,8 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <Link 
-            href="/dashboard" 
+          <Link
+            href="/dashboard"
             className="text-cyan-400 hover:text-cyan-300 flex items-center"
           >
             ← Back to Dashboard
@@ -252,6 +253,12 @@ export default function ProfilePage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Device Management Section */}
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold text-white mb-6">Device Management</h2>
+          <DeviceManager />
         </div>
       </div>
     </div>
