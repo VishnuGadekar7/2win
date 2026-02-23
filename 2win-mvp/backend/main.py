@@ -9,6 +9,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from database import db  # your Supabase wrapper or DB client
 from device_api import router as device_router
+from health_api import router as health_router
+from iot_api import router as iot_router
 from auth import get_current_user
 
 # =======================
@@ -23,10 +25,15 @@ app = FastAPI(
 
 # Include device router
 app.include_router(device_router)
+# Include health router
+app.include_router(health_router)
+# Include IoT router
+app.include_router(iot_router)
 
 # CORS: allow Vercel frontend + local dev
 origins = [
-    #"http://localhost:3000",
+    "http://localhost:3000",
+    "http://localhost:3001",
     "https://2win-frontend.vercel.app"
 ]
 
@@ -47,7 +54,7 @@ SECRET_KEY = "your-secret-key-here"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__ident="2b")
 
 def get_password_hash(password: str) -> str:
     if not password:
