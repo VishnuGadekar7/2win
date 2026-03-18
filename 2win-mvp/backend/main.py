@@ -12,6 +12,8 @@ from device_api import router as device_router
 from health_api import router as health_router
 from iot_api import router as iot_router
 from auth import get_current_user
+from config import settings
+from cron.scheduler import scheduler
 
 # =======================
 # APP CONFIG
@@ -34,8 +36,10 @@ app.include_router(iot_router)
 origins = [
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://2win-frontend.vercel.app"
+    settings.FRONTEND_URL,
 ]
+# Filter out empty strings
+origins = [o for o in origins if o]
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,13 +50,21 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+
+@app.on_event("startup")
+async def startup_event():
+    scheduler.start()
+    print("✅ APScheduler started")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    scheduler.shutdown()
+    print("⏹️ APScheduler stopped")
+
 # =======================
 # SECURITY
 # =======================
-
-SECRET_KEY = "your-secret-key-here"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__ident="2b")
 
@@ -73,7 +85,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 # =======================
 # MODELS
@@ -138,7 +150,7 @@ async def register_user(user: UserCreate):
 
     access_token = create_access_token(
         data={"sub": user.email},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     return {
@@ -158,7 +170,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
     access_token = create_access_token(
         data={"sub": user["email"]},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -166,3 +178,18 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 @app.get("/users/me", response_model=Dict[str, Any])
 async def read_users_me(current_user: Dict = Depends(get_current_user)):
     return current_user
+
+# -------- UPDATE CURRENT USER --------
+@app.patch("/users/me", response_model=Dict[str, Any])
+async def update_users_me(
+    update: UserUpdate,
+    current_user: Dict = Depends(get_current_user)
+):
+    update_data = {k: v for k, v in update.dict().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    update_data["updated_at"] = datetime.utcnow().isoformat()
+    updated_user = await db.update_user(current_user["user_id"], update_data)
+    if not updated_user:
+        raise HTTPException(status_code=500, detail="Failed to update user")
+    return updated_user

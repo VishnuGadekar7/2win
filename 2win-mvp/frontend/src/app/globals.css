@@ -58,54 +58,87 @@ html {
   /* REQUIRED for @apply in v4 */
   @reference "tailwindcss";
 
-  /* Glass card */
+  /* Glass card refined */
   .glass {
-    @apply relative p-6 rounded-2xl border backdrop-blur-xl transition-all;
-    background: hsl(var(--secondary) / 0.8);
-    border-color: hsl(var(--primary) / 0.3);
+    @apply relative p-6 rounded-2xl border backdrop-blur-xl transition-all duration-300;
+    background: linear-gradient(135deg,
+        hsl(var(--secondary) / 0.7),
+        hsl(var(--secondary) / 0.4));
+    border-color: hsl(var(--primary) / 0.2);
     box-shadow:
-      0 25px 50px hsl(var(--background) / 0.5),
-      inset 0 1px 0 hsl(var(--foreground) / 0.1);
+      0 8px 32px 0 rgba(0, 0, 0, 0.37),
+      inset 0 0 0 1px hsl(var(--foreground) / 0.05);
   }
 
-  /* Gradient text */
+  .glass:hover {
+    border-color: hsl(var(--primary) / 0.4);
+    box-shadow:
+      0 12px 48px 0 rgba(0, 0, 0, 0.5),
+      inset 0 0 0 1px hsl(var(--foreground) / 0.1);
+    transform: translateY(-2px);
+  }
+
+  /* Gradient text pulse */
   .gradient-text {
     @apply bg-clip-text text-transparent font-black;
-    background-image: linear-gradient(
-      135deg,
-      hsl(var(--primary)),
-      hsl(270 70% 70%),
-      hsl(280 75% 75%)
-    );
+    background-image: linear-gradient(135deg,
+        hsl(var(--primary)),
+        hsl(270 90% 75%),
+        hsl(280 85% 80%));
+    background-size: 200% auto;
+    animation: gradient-flow 8s linear infinite;
   }
 
-  /* ==============================
-     PARALLAX SECTION (INLINE)
-     ============================== */
+  @keyframes gradient-flow {
+    0% {
+      background-position: 0% 50%;
+    }
 
-  .contact-section {
-    @apply relative isolate overflow-hidden py-32;
-    background: linear-gradient(
-      135deg,
-      hsl(var(--background)),
-      hsl(var(--secondary)),
-      hsl(var(--background))
-    );
+    50% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
   }
 
-  .contact-bg {
-    @apply absolute inset-0 -z-10;
-    will-change: transform;
-    background:
-      radial-gradient(
-        60% 40% at 20% 20%,
-        hsl(var(--primary) / 0.25),
-        transparent 60%
-      ),
-      radial-gradient(
-        50% 35% at 80% 30%,
-        hsl(270 80% 70% / 0.2),
-        transparent 65%
-      );
+  /* Section styles */
+  .section-padding {
+    @apply py-24 sm:py-32;
+  }
+
+  .floating {
+    animation: floating 3s ease-in-out infinite;
+  }
+
+  @keyframes floating {
+    0% {
+      transform: translateY(0px);
+    }
+
+    50% {
+      transform: translateY(-10px);
+    }
+
+    100% {
+      transform: translateY(0px);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 }

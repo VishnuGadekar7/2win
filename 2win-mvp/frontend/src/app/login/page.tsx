@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -11,9 +12,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"success" | "error" | null>(null);
   const router = useRouter();
-
-  //const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
-  const RENDER_API_BASE_URL = "http://localhost:8000";
+  const { login } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,94 +20,81 @@ export default function LoginPage() {
     setMessage("");
     setStatus(null);
 
-    try {
-      const formData = new URLSearchParams();
-      formData.append('username', email);
-      formData.append('password', password);
+    const result = await login(email, password);
 
-      console.log("Sending login request");
-
-      const response = await fetch(`${RENDER_API_BASE_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: formData.toString(),
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-      console.log("Login response:", { status: response.status, data });
-
-      if (response.ok) {
-        setMessage("✅ Login successful! Redirecting...");
-        setStatus("success");
-        // Store the token in localStorage
-        localStorage.setItem('token', data.access_token);
-        // Redirect to dashboard or home page after successful login
-        setTimeout(() => {
-          router.push("/dashboard");
-        }, 1500);
-      } else {
-        let errorMsg = data.detail || "Login failed. Please check your credentials.";
-        setMessage(errorMsg);
-        setStatus("error");
-      }
-    } catch (error: any) {
-      setMessage("Failed to connect to the server. Please try again later.");
+    if (result.ok) {
+      setMessage("✅ Login successful! Redirecting...");
+      setStatus("success");
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1500);
+    } else {
+      setMessage(result.error || "Login failed.");
       setStatus("error");
-      console.error("Login error:", error);
     }
 
     setLoading(false);
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-md glass rounded-3xl p-8 sm:p-10 shadow-2xl border border-slate-700/50">
+    <main className="min-h-screen bg-[hsl(260_10%_4%)] text-foreground flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute inset-0 pointer-events-none -z-10">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="w-full max-w-md glass rounded-[2rem] p-8 sm:p-10 shadow-[0_40px_100px_rgba(0,0,0,0.5)] border-white/5 relative z-10 transition-all">
         <div className="text-center mb-10">
-          <h1 className="text-5xl font-black gradient-text mb-3">2win</h1>
-          <p className="text-slate-300 text-lg">Welcome back!</p>
+          <div className="relative group inline-block">
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+            <div className="relative w-10 h-10 bg-primary rounded-xl flex items-center justify-center font-black text-background mx-auto mb-4 shadow-[0_0_30px_rgba(var(--primary),0.4)]">
+              2
+            </div>
+          </div>
+          <h1 className="text-3xl font-black text-white tracking-tighter mb-2">Welcome Back</h1>
+          <p className="text-foreground/40 font-bold uppercase tracking-widest text-[9px]">Neural Sync Required</p>
         </div>
 
         {message && (
           <div
-            className={`p-4 rounded-2xl mb-8 flex items-center space-x-3 animate-fade-in ${status === "success"
-              ? "bg-emerald-900/50 border border-emerald-500/50 text-emerald-200"
-              : "bg-red-900/50 border border-red-500/50 text-red-200"
+            className={`p-4 rounded-xl mb-8 flex items-center space-x-3 animate-fade-in text-[10px] font-black uppercase tracking-widest ${status === "success"
+              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+              : "bg-red-500/10 border border-red-500/20 text-red-400"
               }`}
           >
+            <div className={`w-1.5 h-1.5 rounded-full ${status === "success" ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
             <span>{message}</span>
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-8">
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-300 mb-1.5 pl-1">
-              Email
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div className="space-y-2">
+            <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
+              Email Address
             </label>
             <input
               type="email"
-              placeholder="john@example.com"
+              placeholder="name@nexus.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-5 py-3.5 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-slate-500 
-                         focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/30 
-                         transition-all duration-200 hover:border-slate-600"
+              className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 
+                         focus:outline-none focus:border-primary/50 transition-all duration-300 font-medium text-sm"
               required
             />
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between mb-1.5 px-1">
-              <label className="block text-sm font-medium text-slate-300">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
                 Password
               </label>
               <Link
                 href="/forgot-password"
-                className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                className="text-[9px] font-black uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
+                tabIndex={-1}
               >
-                Forgot password?
+                Reset Key
               </Link>
             </div>
             <input
@@ -116,9 +102,8 @@ export default function LoginPage() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-5 py-3.5 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-slate-500 
-                         focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/30 
-                         transition-all duration-200 hover:border-slate-600"
+              className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 
+                         focus:outline-none focus:border-primary/50 transition-all duration-300 font-medium text-sm"
               required
             />
           </div>
@@ -126,37 +111,34 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all duration-300 ${loading
-              ? "bg-cyan-700/80 cursor-not-allowed"
-              : "bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-lg hover:shadow-cyan-500/30"
+            className={`w-full py-4 px-8 rounded-xl font-black text-background transition-all duration-300 shadow-[0_15px_30px_rgba(var(--primary),0.15)] text-[10px] uppercase tracking-widest mt-4 ${loading
+              ? "bg-primary/50 cursor-not-allowed opacity-50"
+              : "bg-primary hover:bg-primary/90 hover:shadow-[0_20px_40px_rgba(var(--primary),0.25)] transform hover:-translate-y-0.5 active:scale-95"
               }`}
           >
             {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing in...
+              <span className="flex items-center justify-center gap-3">
+                <div className="w-3.5 h-3.5 border-2 border-background/30 border-t-background rounded-full animate-spin" />
+                Synchronizing...
               </span>
             ) : (
-              <span className="text-base">Sign in</span>
+              "Sign In"
             )}
           </button>
         </form>
 
-        <div className="mt-8 text-center text-sm text-slate-400">
-          Don't have an account?{" "}
+        <div className="mt-8 text-center text-[10px]">
+          <span className="text-foreground/30 font-bold uppercase tracking-widest">New to 2win?</span>{" "}
           <Link
             href="/register"
-            className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors hover:underline"
+            className="text-primary font-black uppercase tracking-widest hover:underline underline-offset-4 decoration-2"
           >
-            Sign up
+            Register Twin
           </Link>
         </div>
 
-        <p className="text-xs text-slate-500 text-center mt-8">
-          Backend: https://twowin-8mg4.onrender.com • Day 1 MVP • Team Nodemons
+        <p className="text-[9px] uppercase tracking-[0.4em] text-foreground/20 font-black text-center mt-10">
+          Neural-Tech • v1.0.42
         </p>
       </div>
     </main>

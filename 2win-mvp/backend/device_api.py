@@ -46,21 +46,22 @@ async def register_device(
         
         # Create device record
         device_data = {
-            "user_id": current_user["id"],
+            "user_id": current_user["user_id"],
             "device_type": "esp32_health",
             "device_uid": f"esp32_{secrets.token_hex(8)}",
             "device_name": request.device_name or "ESP32 Health Monitor"
         }
         
         # Insert device
-        device_response = db.supabase.table("devices").insert(device_data).execute()
-        if not device_response.data:
+        device_response = await db.create_device(device_data)
+        
+        if not device_response:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create device"
             )
         
-        device_id = device_response.data[0]["id"]
+        device_id = device_response["id"]
         
         # Store device key
         key_data = {
@@ -69,10 +70,10 @@ async def register_device(
             "active": True
         }
         
-        key_response = db.supabase.table("device_keys").insert(key_data).execute()
-        if not key_response.data:
+        key_response = await db.create_device_key(key_data)
+        if not key_response:
             # Rollback device creation if key fails
-            db.supabase.table("devices").delete().eq("id", device_id).execute()
+            await db.supabase.table("devices").delete().eq("id", device_id).execute()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to store device key"
@@ -98,15 +99,15 @@ async def get_user_devices(current_user: dict = Depends(get_current_user)):
     """Get all devices for the current user"""
     
     try:
-        response = db.supabase.table("devices").select("*").eq("user_id", current_user["id"]).execute()
+        devices = await db.get_user_devices(current_user["user_id"])
         
-        devices = []
-        for device in response.data or []:
+        device_list = []
+        for device in devices:
             # Check if device has active key
             key_response = db.supabase.table("device_keys").select("active").eq("device_id", device["id"]).eq("active", True).execute()
             active = len(key_response.data) > 0
             
-            devices.append(DeviceResponse(
+            device_list.append(DeviceResponse(
                 id=device["id"],
                 device_uid=device["device_uid"],
                 device_name=device["device_name"],
@@ -114,7 +115,7 @@ async def get_user_devices(current_user: dict = Depends(get_current_user)):
                 active=active
             ))
         
-        return devices
+        return device_list
         
     except Exception as e:
         raise HTTPException(
@@ -131,20 +132,19 @@ async def revoke_device(
     
     try:
         # Verify device belongs to user
-        device_response = db.supabase.table("devices").select("*").eq("id", device_id).eq("user_id", current_user["id"]).execute()
-        if not device_response.data:
+        devices = await db.get_user_devices(current_user["user_id"])
+        device_exists = any(device["id"] == device_id for device in devices)
+        
+        if not device_exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Device not found"
             )
         
         # Revoke the device key
-        revoke_response = db.supabase.table("device_keys").update({
-            "active": False,
-            "revoked_at": "now()"
-        }).eq("device_id", device_id).execute()
+        revoke_response = await db.revoke_device_key(device_id)
         
-        if not revoke_response.data:
+        if not revoke_response:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Device key not found"

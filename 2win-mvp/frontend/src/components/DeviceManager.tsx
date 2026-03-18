@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 interface Device {
   id: string;
@@ -18,16 +19,17 @@ interface NewDevice {
 }
 
 export default function DeviceManager() {
+  const { token } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [newDevice, setNewDevice] = useState<NewDevice | null>(null);
   const [error, setError] = useState("");
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const fetchDevices = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/devices", {
+      const response = await fetch(`${API_URL}/api/devices`, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -49,8 +51,7 @@ export default function DeviceManager() {
     setError("");
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/devices/register", {
+      const response = await fetch(`${API_URL}/api/devices/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -81,8 +82,7 @@ export default function DeviceManager() {
     if (!confirm("Are you sure you want to revoke this device?")) return;
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`/api/devices/${deviceId}/revoke`, {
+      const response = await fetch(`${API_URL}/api/devices/${deviceId}/revoke`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,

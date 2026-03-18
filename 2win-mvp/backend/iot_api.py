@@ -1,267 +1,208 @@
 """
-IoT Data Ingestion API
-Handles data uploads from ESP32 devices and triggers ML predictions
+IoT API endpoints — handles sensor data ingestion from ESP32 devices.
+Wires to actual DB writes and triggers the prediction pipeline.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-import hashlib
-import json
-
 from database import db
-from services.data_ingestion import data_service
 from auth import get_current_user
 
-router = APIRouter(prefix="/api/iot", tags=["iot"])
+router = APIRouter(prefix="/api/iot", tags=["IoT"])
 
-class ReadingData(BaseModel):
+
+# ─── MODELS ──────────────────────────────────────────────────────────────
+
+class SensorReading(BaseModel):
     device_id: str
     metric: str
     value: float
-    unit: str
-    ts: datetime
+    unit: str = ""
+    ts: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
-class DeviceAuth(BaseModel):
-    device_key: str = Field(..., min_length=32, max_length=32)
 
-class BatchReadings(BaseModel):
-    readings: List[ReadingData]
-    device_key: str = Field(..., min_length=32, max_length=32)
+class BatchIngestRequest(BaseModel):
+    device_key: str
+    readings: List[SensorReading]
+
+
+class SingleIngestRequest(BaseModel):
+    device_id: str
+    metric: str
+    value: float
+    unit: str = ""
+    ts: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+class DeviceRegisterRequest(BaseModel):
+    device_uid: str
+    device_name: str = "ESP32 Health Monitor"
+    user_id: str
+
+
+# ─── BACKGROUND TASK: PREDICTION PIPELINE ────────────────────────────────
+
+async def run_feature_pipeline(user_id: str):
+    """
+    Background task: fetch recent readings for the user,
+    run feature engineering, compute risk scores, and save predictions.
+    """
+    try:
+        from services.data_ingestion import run_prediction_pipeline
+
+        # Get recent readings (last 6 hours)
+        readings = await db.get_recent_readings(user_id, hours=6)
+        if len(readings) >= 5:
+            await run_prediction_pipeline(user_id, readings)
+            print(f"✅ Prediction pipeline completed for user {user_id} ({len(readings)} readings)")
+        else:
+            print(f"⏳ Not enough readings for user {user_id} ({len(readings)}/5 minimum)")
+    except Exception as e:
+        print(f"❌ Feature pipeline error for user {user_id}: {str(e)}")
+
+
+# ─── ENDPOINTS ───────────────────────────────────────────────────────────
 
 @router.post("/ingest")
-async def ingest_sensor_data(
-    data: BatchReadings,
-    background_tasks: BackgroundTasks
+async def batch_ingest(
+    payload: BatchIngestRequest,
+    background_tasks: BackgroundTasks,
 ):
     """
-    Ingest batch of sensor readings from IoT device
+    Batch ingestion from ESP32 devices.
+    Validates device key, writes readings to DB, triggers prediction pipeline.
     """
-    try:
-        # Authenticate device
-        device_info = await authenticate_device(data.device_key)
-        if not device_info:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid device key"
+    # Validate device key
+    device_info = await db.validate_device_key(payload.device_key)
+    if not device_info:
+        raise HTTPException(status_code=401, detail="Invalid or revoked device key")
+
+    device_id = device_info.get("device_id")
+    user_id = device_info.get("devices", {}).get("user_id")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Device not associated with a user")
+
+    # Write each reading to DB
+    stored_count = 0
+    valid_metrics = {"heart_rate", "spo2", "body_temperature", "blood_glucose",
+                     "steps_per_minute", "steps", "motion", "rr_interval",
+                     "ambient_temperature", "humidity", "sleep_hours"}
+
+    for reading in payload.readings:
+        metric = reading.metric.lower().strip()
+        if metric in valid_metrics:
+            await db.insert_reading(
+                device_id=device_id,
+                user_id=user_id,
+                metric=metric,
+                value=reading.value,
+                unit=reading.unit,
             )
-        
-        # Add user_id to all readings
-        user_id = device_info.get('user_id')
-        enriched_readings = []
-        
-        for reading in data.readings:
-            enriched_reading = reading.dict()
-            enriched_reading['user_id'] = user_id
-            enriched_readings.append(enriched_reading)
-        
-        # Process readings in background
-        background_tasks.add_task(
-            process_readings_background,
-            enriched_readings
-        )
-        
-        return {
-            "status": "success",
-            "message": f"Processing {len(enriched_readings)} readings",
-            "device_id": device_info.get('device_id'),
-            "user_id": user_id
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process data: {str(e)}"
-        )
+            stored_count += 1
+
+    # Trigger prediction pipeline in background
+    background_tasks.add_task(run_feature_pipeline, user_id)
+
+    return {
+        "status": "ok",
+        "readings_stored": stored_count,
+        "total_received": len(payload.readings),
+        "message": f"Stored {stored_count} readings. Prediction pipeline queued.",
+    }
+
 
 @router.post("/ingest-single")
-async def ingest_single_reading(
-    data: ReadingData,
-    background_tasks: BackgroundTasks
+async def ingest_single(
+    reading: SingleIngestRequest,
+    background_tasks: BackgroundTasks,
 ):
-    """
-    Ingest single sensor reading from IoT device
-    """
-    try:
-        # Get device info from reading (device should be authenticated)
-        device_info = await db.get_device_by_uid(data.device_id)
-        if not device_info or not device_info.get('active'):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Device not registered or inactive"
-            )
-        
-        # Add user_id
-        enriched_reading = data.dict()
-        enriched_reading['user_id'] = device_info.get('user_id')
-        
-        # Process in background
-        background_tasks.add_task(
-            process_readings_background,
-            [enriched_reading]
-        )
-        
-        return {
-            "status": "success",
-            "message": "Reading processed",
-            "metric": data.metric,
-            "value": data.value
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process reading: {str(e)}"
-        )
+    """Single reading upload — looks up device by device_id (UID)."""
+    device = await db.get_device_by_uid(reading.device_id)
+
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    user_id = device.get("user_id")
+
+    await db.insert_reading(
+        device_id=device.get("id"),
+        user_id=user_id,
+        metric=reading.metric,
+        value=reading.value,
+        unit=reading.unit,
+    )
+
+    # Trigger pipeline if we have enough data
+    count = await db.count_recent_readings(user_id, hours=6)
+    if count >= 5:
+        background_tasks.add_task(run_feature_pipeline, user_id)
+
+    return {"status": "ok", "message": "Reading stored"}
+
 
 @router.post("/device-register")
-async def register_device(data: DeviceAuth):
-    """
-    Register new IoT device (first-time setup)
-    """
-    try:
-        # Check if device key is already registered
-        key_hash = hash_device_key(data.device_key)
-        existing_device = await db.validate_device_key(key_hash)
-        
-        if existing_device:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Device key already registered"
-            )
-        
-        # Generate device UID and register
-        device_uid = f"ESP32_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        device_data = {
-            "device_uid": device_uid,
-            "device_name": f"ESP32 Device {device_uid[-6:]}",
-            "device_type": "esp32_health"
-        }
-        
-        # Create device (will be associated with user during first data upload)
-        device = await db.create_device(device_data)
-        
-        # Create device key
-        key_data = {
-            "device_id": device.get('id'),
-            "key_hash": key_hash,
-            "active": True
-        }
-        
-        await db.create_device_key(key_data)
-        
+async def register_device(payload: DeviceRegisterRequest):
+    """Direct device self-registration."""
+    import uuid
+
+    existing = await db.get_device_by_uid(payload.device_uid)
+    if existing:
         return {
-            "status": "success",
-            "message": "Device registered successfully",
-            "device_uid": device_uid,
-            "device_key": data.device_key
+            "status": "already_registered",
+            "device_id": existing.get("id"),
+            "device_uid": existing.get("device_uid"),
         }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to register device: {str(e)}"
-        )
+
+    device_data = {
+        "id": str(uuid.uuid4()),
+        "device_uid": payload.device_uid,
+        "device_name": payload.device_name,
+        "device_type": "esp32_health",
+        "user_id": payload.user_id,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    result = await db.create_device(device_data)
+
+    return {
+        "status": "registered",
+        "device_id": result.get("id"),
+        "device_uid": payload.device_uid,
+    }
+
 
 @router.get("/device-status/{device_uid}")
-async def get_device_status(device_uid: str):
-    """
-    Get device status and recent data
-    """
-    try:
-        # Get device info
-        device_info = await db.get_device_by_uid(device_uid)
-        if not device_info:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Device not found"
-            )
-        
-        # Get recent readings
-        recent_readings = await db.get_recent_readings(
-            device_info.get('user_id'), 
-            hours=1
-        )
-        
-        # Filter readings for this device
-        device_readings = [
-            r for r in recent_readings 
-            if r.get('device_id') == device_uid
-        ]
-        
-        return {
-            "device_uid": device_uid,
-            "device_name": device_info.get('device_name'),
-            "active": device_info.get('active', True),
-            "last_seen": max([r.get('ts') for r in device_readings]) if device_readings else None,
-            "recent_readings_count": len(device_readings),
-            "battery_level": next(
-                (r.get('value') for r in device_readings 
-                 if r.get('metric') == 'device_battery'),
-                None
-            ),
-            "signal_strength": next(
-                (r.get('value') for r in device_readings 
-                 if r.get('metric') == 'signal_strength'),
-                None
-            )
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get device status: {str(e)}"
-        )
+async def device_status(device_uid: str):
+    """Get device connection status and recent telemetry summary."""
+    device = await db.get_device_by_uid(device_uid)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    user_id = device.get("user_id")
+    readings = await db.get_recent_readings(user_id, hours=1)
+
+    return {
+        "device_uid": device_uid,
+        "device_name": device.get("device_name"),
+        "active": True,
+        "readings_last_hour": len(readings),
+        "last_reading": readings[0] if readings else None,
+    }
+
 
 @router.get("/health-summary/{user_id}")
-async def get_health_summary(user_id: str):
-    """
-    Get comprehensive health summary for user
-    """
-    try:
-        summary = await data_service.get_user_health_summary(user_id)
-        return summary
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate health summary: {str(e)}"
-        )
+async def health_summary(user_id: str):
+    """Comprehensive processed health summary for a user."""
+    readings = await db.get_recent_readings(user_id, hours=24)
+    predictions = await db.get_latest_predictions(user_id, limit=10)
+    alerts = await db.get_medical_alerts(user_id, unread_only=True)
 
-# Helper functions
-async def authenticate_device(device_key: str) -> Optional[Dict[str, Any]]:
-    """Authenticate device using key"""
-    key_hash = hash_device_key(device_key)
-    return await db.validate_device_key(key_hash)
-
-def hash_device_key(device_key: str) -> str:
-    """Hash device key for storage"""
-    return hashlib.sha256(device_key.encode()).hexdigest()
-
-async def process_readings_background(readings: List[Dict[str, Any]]):
-    """Background task to process readings"""
-    try:
-        await data_service.process_device_readings(readings)
-        print(f"✅ Background processing completed for {len(readings)} readings")
-    except Exception as e:
-        print(f"❌ Background processing failed: {str(e)}")
-
-# Device authentication dependency
-async def get_device_from_key(device_key: str = None):
-    """Get device from authenticated key"""
-    if not device_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Device key required"
-        )
-    
-    device_info = await authenticate_device(device_key)
-    if not device_info:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid device key"
-        )
-    
-    return device_info
+    return {
+        "user_id": user_id,
+        "readings_24h": len(readings),
+        "predictions": predictions,
+        "unread_alerts": len(alerts),
+        "alerts": alerts,
+    }

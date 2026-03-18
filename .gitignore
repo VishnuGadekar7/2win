@@ -1,0 +1,43 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+.env/
+2win-mvp/backend/venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment variables
+.env
+*.env
+
+# Node modules
+node_modules/
+2win-mvp/frontend/node_modules/
+
+# Next.js build output
+.next/
+out/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Distribution
+dist/
+*.egg-info/

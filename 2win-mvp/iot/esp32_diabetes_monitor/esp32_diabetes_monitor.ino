@@ -1,13 +1,23 @@
 /*
  * ESP32 Diabetes Health Monitor
- * Collects sensor data and uploads to Supabase for diabetes prediction
+ * Collects sensor data and uploads to 2WIN.AI backend for health prediction
  * 
  * Sensors:
- * - MAX30201: Body Temperature
+ * - MAX30205: Body Temperature
  * - DHT11: Ambient Temperature & Humidity  
  * - MPU6050: Motion/Activity detection
- * - Pulse Sensor: Heart rate (optional)
+ * - Pulse Sensor: Heart rate (simulated if no sensor)
  * - Battery monitoring
+ *
+ * ═══════════════════════════════════════════════════════════════
+ *  HOW TO SET UP:
+ *  1. Set your WiFi name & password below
+ *  2. Set BACKEND_URL to your PC's IP (run 'ipconfig' to find it)
+ *  3. Register a device via the 2WIN.AI web app (Profile → Devices)
+ *  4. Paste the device_key you get into DEVICE_KEY below
+ *  5. Flash this sketch to your ESP32
+ *  6. Open Serial Monitor at 115200 baud to see output
+ * ═══════════════════════════════════════════════════════════════
  */
 
 #include <WiFi.h>
@@ -17,27 +27,35 @@
 #include <DHT.h>
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
-#include <EEPROM.h>
 
-// WiFi Configuration
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+// ═══════════════════════════════════════════
+// ✏️  EDIT THESE 3 VALUES BEFORE FLASHING
+// ═══════════════════════════════════════════
 
-// Supabase Configuration
-const char* SUPABASE_URL = "https://pagibeepfdiecyvactne.supabase.co";
-const char* SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhZ2liZWVwZmRpZWN5dmFjdG5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0MTg4MjQsImV4cCI6MjA4Mjk5NDgyNH0.HJY3i-FWxOynDjQWbby8pek7Dgw5oXqra42q1JGLuPs";
-const char* DEVICE_KEY = "YOUR_DEVICE_KEY"; // 32-character key from backend
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";       // ← your WiFi name
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";    // ← your WiFi password
+const char* DEVICE_KEY    = "YOUR_DEVICE_KEY";       // ← from web app device registration
+
+// Backend URL — use your PC's local IP (find with 'ipconfig' command)
+// Example: "http://192.168.1.5:8000"
+// For deployed server: "https://your-render-url.onrender.com"
+const char* BACKEND_URL = "http://192.168.1.X:8000"; // ← your PC IP + port 8000
+
+// ═══════════════════════════════════════════
 
 // Sensor Objects
 MAX30205 tempSensor;
-DHT dht(D4, DHT11); // DHT11 on pin D4
+DHT dht(4, DHT11);  // DHT11 on GPIO 4
 Adafruit_MPU6050 mpu;
 
-// Device Configuration
-String DEVICE_UID = "ESP32_" + WiFi.macAddress();
-String DEVICE_NAME = "Diabetes Monitor 1.0";
-const int UPLOAD_INTERVAL = 30000; // 30 seconds
-const int SENSOR_READ_INTERVAL = 5000; // 5 seconds
+// Device Config
+String DEVICE_UID;
+const int UPLOAD_INTERVAL = 30000;       // Upload every 30 seconds
+const int SENSOR_READ_INTERVAL = 5000;   // Read sensors every 5 seconds
+
+// Sensor flags
+bool hasMAX30205 = false;
+bool hasMPU6050 = false;
 
 // Data Structure
 struct HealthData {
@@ -49,18 +67,20 @@ struct HealthData {
   float activityIntensity;
   int batteryLevel;
   int signalStrength;
-  unsigned long timestamp;
 };
 
 HealthData currentData;
-WiFiClient client;
-HTTPClient http;
 
 void setup() {
   Serial.begin(115200);
-  EEPROM.begin(512);
+  delay(1000);
   
-  Serial.println("=== ESP32 Diabetes Health Monitor ===");
+  Serial.println();
+  Serial.println("╔══════════════════════════════════════╗");
+  Serial.println("║   ESP32 2WIN.AI Health Monitor       ║");
+  Serial.println("╚══════════════════════════════════════╝");
+  
+  DEVICE_UID = "ESP32_" + WiFi.macAddress();
   Serial.print("Device UID: ");
   Serial.println(DEVICE_UID);
   
@@ -70,234 +90,224 @@ void setup() {
   // Connect to WiFi
   connectWiFi();
   
-  // Initialize device key if not exists
-  initializeDeviceKey();
+  // LED for status
+  pinMode(LED_BUILTIN, OUTPUT);
   
-  Serial.println("Setup complete. Starting data collection...");
+  Serial.println("✅ Setup complete. Starting data collection...");
+  Serial.println();
 }
 
 void loop() {
   static unsigned long lastSensorRead = 0;
   static unsigned long lastUpload = 0;
-  static unsigned long lastHeartbeat = 0;
   
-  unsigned long currentTime = millis();
+  unsigned long now = millis();
   
   // Read sensors every 5 seconds
-  if (currentTime - lastSensorRead >= SENSOR_READ_INTERVAL) {
+  if (now - lastSensorRead >= SENSOR_READ_INTERVAL) {
     readSensors();
-    lastSensorRead = currentTime;
-    
-    // Print data to Serial for debugging
     printHealthData();
+    lastSensorRead = now;
   }
   
   // Upload data every 30 seconds
-  if (currentTime - lastUpload >= UPLOAD_INTERVAL) {
+  if (now - lastUpload >= UPLOAD_INTERVAL) {
     if (WiFi.status() == WL_CONNECTED) {
-      uploadToSupabase();
-      lastUpload = currentTime;
+      uploadToBackend();
+      lastUpload = now;
     } else {
-      Serial.println("WiFi disconnected. Attempting reconnection...");
+      Serial.println("⚠️  WiFi disconnected. Reconnecting...");
       connectWiFi();
     }
   }
   
-  // Heartbeat LED every 2 seconds
-  if (currentTime - lastHeartbeat >= 2000) {
+  // Heartbeat LED
+  static unsigned long lastBlink = 0;
+  if (now - lastBlink >= 2000) {
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    lastHeartbeat = currentTime;
+    lastBlink = now;
   }
   
   delay(100);
 }
 
+// ═══════════════════════════════════════════
+// SENSOR INITIALIZATION
+// ═══════════════════════════════════════════
+
 void initializeSensors() {
-  // Initialize MAX30201 (Body Temperature)
-  if (!tempSensor.begin(0x57)) {
-    Serial.println("MAX30201 not found. Using simulated data.");
+  Wire.begin();
+  
+  // MAX30205 (Body Temperature)
+  if (tempSensor.begin()) {
+    hasMAX30205 = true;
+    Serial.println("✅ MAX30205 body temperature sensor found");
   } else {
-    tempSensor.setDeviceMode(MAX30205_MODE_CONTINUOUS);
-    tempSensor.setConversionRate(MAX30205_CONVERSION_RATE_4_HZ);
+    Serial.println("⚠️  MAX30205 not found — will simulate body temp");
   }
   
-  // Initialize DHT11 (Ambient Temp/Humidity)
+  // DHT11 (Ambient Temp/Humidity)
   dht.begin();
+  Serial.println("✅ DHT11 initialized");
   
-  // Initialize MPU6050 (Motion/Activity)
-  if (!mpu.begin()) {
-    Serial.println("MPU6050 not found. Using simulated activity data.");
-  } else {
+  // MPU6050 (Motion/Activity)
+  if (mpu.begin()) {
+    hasMPU6050 = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DPS);
+    Serial.println("✅ MPU6050 motion sensor found");
+  } else {
+    Serial.println("⚠️  MPU6050 not found — will simulate activity");
   }
-  
-  // Initialize LED
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  
-  Serial.println("Sensors initialized.");
 }
 
+// ═══════════════════════════════════════════
+// SENSOR READING
+// ═══════════════════════════════════════════
+
 void readSensors() {
-  // Read body temperature
-  if (tempSensor.begin()) {
-    currentData.bodyTemperature = tempSensor.readThermocoupleTemperature();
+  // Body Temperature
+  if (hasMAX30205) {
+    float tempC = tempSensor.getTemperature();
+    currentData.bodyTemperature = tempC * 9.0 / 5.0 + 32.0; // Convert C → F
   } else {
-    // Simulate body temperature (98.6°F ± 0.5°F)
     currentData.bodyTemperature = 98.6 + (random(-50, 50) / 100.0);
   }
   
-  // Read ambient temperature and humidity
-  float ambientTemp = dht.readTemperature();
+  // Ambient Temperature & Humidity (DHT11)
+  float ambientTemp = dht.readTemperature(true); // true = Fahrenheit
   float humidity = dht.readHumidity();
   
-  if (!isnan(ambientTemp)) {
-    currentData.ambientTemperature = ambientTemp;
-  } else {
-    currentData.ambientTemperature = 70.0 + (random(-100, 100) / 100.0);
-  }
+  currentData.ambientTemperature = isnan(ambientTemp) ? (70.0 + random(-100, 100) / 100.0) : ambientTemp;
+  currentData.humidity = isnan(humidity) ? (45.0 + random(-100, 100) / 100.0) : humidity;
   
-  if (!isnan(humidity)) {
-    currentData.humidity = humidity;
-  } else {
-    currentData.humidity = 45.0 + (random(-100, 100) / 100.0);
-  }
+  // Heart Rate (simulated — replace with pulse sensor if available)
+  currentData.heartRate = 65 + random(0, 30);
   
-  // Simulate heart rate (60-100 BPM)
-  currentData.heartRate = 60 + random(0, 40);
-  
-  // Read activity from MPU6050 or simulate
-  sensors_event_t a, g, temp;
-  if (mpu.begin()) {
+  // Motion / Activity (MPU6050)
+  if (hasMPU6050) {
+    sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
-    currentData.activityIntensity = sqrt(a.acceleration.x*a.acceleration.x + 
-                                        a.acceleration.y*a.acceleration.y + 
-                                        a.acceleration.z*a.acceleration.z);
+    currentData.activityIntensity = sqrt(
+      a.acceleration.x * a.acceleration.x +
+      a.acceleration.y * a.acceleration.y +
+      a.acceleration.z * a.acceleration.z
+    );
   } else {
     currentData.activityIntensity = random(0, 100) / 100.0;
   }
   
-  // Simulate steps per minute based on activity
-  if (currentData.activityIntensity > 2.0) {
-    currentData.stepsPerMinute = 80 + random(0, 40);
-  } else {
-    currentData.stepsPerMinute = 0;
-  }
+  // Steps per minute (estimated from activity intensity)
+  currentData.stepsPerMinute = (currentData.activityIntensity > 2.0) ? (80 + random(0, 40)) : 0;
   
-  // Read battery level
-  currentData.batteryLevel = map(analogRead(A0), 0, 4095, 100, 0);
+  // Battery level
+  currentData.batteryLevel = map(analogRead(A0), 0, 4095, 0, 100);
   
-  // Read WiFi signal strength
+  // WiFi signal
   currentData.signalStrength = WiFi.RSSI();
-  
-  // Set timestamp
-  currentData.timestamp = millis();
 }
 
-void uploadToSupabase() {
-  if (strlen(DEVICE_KEY) != 32) {
-    Serial.println("Device key not configured. Skipping upload.");
-    return;
-  }
+// ═══════════════════════════════════════════
+// UPLOAD TO 2WIN BACKEND (FastAPI)
+// ═══════════════════════════════════════════
+
+void uploadToBackend() {
+  Serial.println("📤 Uploading to 2WIN backend...");
   
-  // Create JSON payload
+  // Build JSON: { "device_key": "...", "readings": [...] }
   DynamicJsonDocument doc(2048);
+  doc["device_key"] = DEVICE_KEY;
   
-  // Create readings array
   JsonArray readings = doc.createNestedArray("readings");
   
-  // Add body temperature reading
-  JsonObject bodyTemp = readings.createNestedObject();
-  bodyTemp["device_id"] = DEVICE_UID;
-  bodyTemp["metric"] = "body_temperature";
-  bodyTemp["value"] = currentData.bodyTemperature;
-  bodyTemp["unit"] = "fahrenheit";
-  bodyTemp["ts"] = getCurrentISO8601();
+  // Heart rate
+  JsonObject hr = readings.createNestedObject();
+  hr["device_id"] = DEVICE_UID;
+  hr["metric"] = "heart_rate";
+  hr["value"] = currentData.heartRate;
+  hr["unit"] = "bpm";
   
-  // Add ambient temperature reading
-  JsonObject ambientTemp = readings.createNestedObject();
-  ambientTemp["device_id"] = DEVICE_UID;
-  ambientTemp["metric"] = "ambient_temperature";
-  ambientTemp["value"] = currentData.ambientTemperature;
-  ambientTemp["unit"] = "fahrenheit";
-  ambientTemp["ts"] = getCurrentISO8601();
+  // Body temperature
+  JsonObject bt = readings.createNestedObject();
+  bt["device_id"] = DEVICE_UID;
+  bt["metric"] = "body_temperature";
+  bt["value"] = currentData.bodyTemperature;
+  bt["unit"] = "°F";
   
-  // Add humidity reading
-  JsonObject humidityObj = readings.createNestedObject();
-  humidityObj["device_id"] = DEVICE_UID;
-  humidityObj["metric"] = "ambient_humidity";
-  humidityObj["value"] = currentData.humidity;
-  humidityObj["unit"] = "percent";
-  humidityObj["ts"] = getCurrentISO8601();
+  // SpO2 (simulated — replace if you add a MAX30102 sensor)
+  JsonObject sp = readings.createNestedObject();
+  sp["device_id"] = DEVICE_UID;
+  sp["metric"] = "spo2";
+  sp["value"] = 95 + random(0, 4);  // 95-98%
+  sp["unit"] = "%";
   
-  // Add heart rate reading
-  JsonObject heartRateObj = readings.createNestedObject();
-  heartRateObj["device_id"] = DEVICE_UID;
-  heartRateObj["metric"] = "heart_rate";
-  heartRateObj["value"] = currentData.heartRate;
-  heartRateObj["unit"] = "bpm";
-  heartRateObj["ts"] = getCurrentISO8601();
+  // Steps per minute
+  JsonObject steps = readings.createNestedObject();
+  steps["device_id"] = DEVICE_UID;
+  steps["metric"] = "steps_per_minute";
+  steps["value"] = currentData.stepsPerMinute;
+  steps["unit"] = "steps/min";
   
-  // Add activity reading
-  JsonObject activityObj = readings.createNestedObject();
-  activityObj["device_id"] = DEVICE_UID;
-  activityObj["metric"] = "steps_per_minute";
-  activityObj["value"] = currentData.stepsPerMinute;
-  activityObj["unit"] = "steps/min";
-  activityObj["ts"] = getCurrentISO8601();
+  // Ambient temperature
+  JsonObject at = readings.createNestedObject();
+  at["device_id"] = DEVICE_UID;
+  at["metric"] = "ambient_temperature";
+  at["value"] = currentData.ambientTemperature;
+  at["unit"] = "°F";
   
-  // Add battery reading
-  JsonObject batteryObj = readings.createNestedObject();
-  batteryObj["device_id"] = DEVICE_UID;
-  batteryObj["metric"] = "device_battery";
-  batteryObj["value"] = currentData.batteryLevel;
-  batteryObj["unit"] = "percent";
-  batteryObj["ts"] = getCurrentISO8601();
+  // Humidity
+  JsonObject hm = readings.createNestedObject();
+  hm["device_id"] = DEVICE_UID;
+  hm["metric"] = "humidity";
+  hm["value"] = currentData.humidity;
+  hm["unit"] = "%";
   
-  // Add signal strength reading
-  JsonObject signalObj = readings.createNestedObject();
-  signalObj["device_id"] = DEVICE_UID;
-  signalObj["metric"] = "signal_strength";
-  signalObj["value"] = currentData.signalStrength;
-  signalObj["unit"] = "dbm";
-  signalObj["ts"] = getCurrentISO8601();
+  // Serialize
+  String jsonPayload;
+  serializeJson(doc, jsonPayload);
   
-  // Serialize JSON
-  String jsonString;
-  serializeJson(doc, jsonString);
-  
-  // Send to Supabase Edge Function
-  String url = String(SUPABASE_URL) + "/rest/v1/readings";
+  // POST to backend /api/iot/ingest
+  HTTPClient http;
+  String url = String(BACKEND_URL) + "/api/iot/ingest";
   
   http.begin(url);
-  http.addHeader("apikey", SUPABASE_KEY);
-  http.addHeader("Authorization", "Bearer " + String(SUPABASE_KEY));
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("Prefer", "return=minimal");
+  http.setTimeout(10000); // 10 second timeout
   
-  int httpResponseCode = http.POST(jsonString);
+  Serial.print("  → POST ");
+  Serial.println(url);
   
-  if (httpResponseCode > 0) {
-    Serial.print("Upload response code: ");
-    Serial.println(httpResponseCode);
+  int httpCode = http.POST(jsonPayload);
+  
+  if (httpCode > 0) {
+    String response = http.getString();
     
-    if (httpResponseCode == 201) {
-      Serial.println("Data uploaded successfully!");
+    if (httpCode == 200) {
+      Serial.println("  ✅ Upload successful!");
+      Serial.print("  Response: ");
+      Serial.println(response);
     } else {
-      Serial.print("Upload failed. Response: ");
-      Serial.println(http.getString());
+      Serial.print("  ❌ Server returned: ");
+      Serial.println(httpCode);
+      Serial.print("  Body: ");
+      Serial.println(response);
     }
   } else {
-    Serial.println("Failed to connect to Supabase");
+    Serial.print("  ❌ Connection failed: ");
+    Serial.println(http.errorToString(httpCode));
+    Serial.println("  Check: Is backend running? Is IP correct?");
   }
   
   http.end();
+  Serial.println();
 }
 
+// ═══════════════════════════════════════════
+// WIFI
+// ═══════════════════════════════════════════
+
 void connectWiFi() {
-  Serial.print("Connecting to WiFi...");
-  
+  Serial.print("📡 Connecting to WiFi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
   int attempts = 0;
@@ -308,105 +318,31 @@ void connectWiFi() {
   }
   
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWiFi connected!");
-    Serial.print("IP address: ");
+    Serial.println(" Connected!");
+    Serial.print("   IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("   Signal: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
   } else {
-    Serial.println("\nFailed to connect to WiFi");
+    Serial.println(" Failed!");
+    Serial.println("   Check WIFI_SSID and WIFI_PASSWORD");
   }
 }
 
-void initializeDeviceKey() {
-  // Check if device key is stored in EEPROM
-  String storedKey = "";
-  for (int i = 0; i < 32; i++) {
-    char c = EEPROM.read(i);
-    if (c == 0) break;
-    storedKey += c;
-  }
-  
-  if (storedKey.length() == 32) {
-    Serial.println("Device key found in EEPROM.");
-    return;
-  }
-  
-  // If no key stored, wait for user to configure
-  Serial.println("No device key found. Please configure via web interface or serial.");
-  Serial.println("Device key format: 32-character alphanumeric string");
-  Serial.println("Example: ABC123DEF456GHI789JKL012MNO345");
-  
-  // Wait for key input via serial (for testing)
-  while (storedKey.length() != 32 && Serial.available()) {
-    if (Serial.available()) {
-      String input = Serial.readStringUntil('\n');
-      input.trim();
-      
-      if (input.length() == 32) {
-        // Store key in EEPROM
-        for (int i = 0; i < 32; i++) {
-          EEPROM.write(i, input.charAt(i));
-        }
-        EEPROM.commit();
-        
-        Serial.println("Device key stored successfully!");
-        storedKey = input;
-      } else {
-        Serial.println("Invalid key format. Must be 32 characters.");
-      }
-    }
-    delay(100);
-  }
-}
-
-String getCurrentISO8601() {
-  // Get current time (simplified - in production, use NTP)
-  unsigned long currentTime = millis();
-  unsigned long seconds = currentTime / 1000;
-  unsigned long minutes = seconds / 60;
-  unsigned long hours = minutes / 60;
-  unsigned long days = hours / 24;
-  
-  // Create ISO8601 timestamp (simplified)
-  char timestamp[32];
-  sprintf(timestamp, "2024-02-01T%02d:%02d:%02d.000Z", 
-          (hours % 24), (minutes % 60), (seconds % 60));
-  
-  return String(timestamp);
-}
+// ═══════════════════════════════════════════
+// DEBUG OUTPUT
+// ═══════════════════════════════════════════
 
 void printHealthData() {
-  Serial.println("\n=== Health Data ===");
-  Serial.print("Body Temp: ");
-  Serial.print(currentData.bodyTemperature);
-  Serial.println("°F");
-  
-  Serial.print("Ambient Temp: ");
-  Serial.print(currentData.ambientTemperature);
-  Serial.println("°F");
-  
-  Serial.print("Humidity: ");
-  Serial.print(currentData.humidity);
-  Serial.println("%");
-  
-  Serial.print("Heart Rate: ");
-  Serial.print(currentData.heartRate);
-  Serial.println(" BPM");
-  
-  Serial.print("Activity: ");
-  Serial.print(currentData.activityIntensity);
-  Serial.println(" m/s²");
-  
-  Serial.print("Steps/min: ");
-  Serial.print(currentData.stepsPerMinute);
-  Serial.println(" steps/min");
-  
-  Serial.print("Battery: ");
-  Serial.print(currentData.batteryLevel);
-  Serial.println("%");
-  
-  Serial.print("Signal: ");
-  Serial.print(currentData.signalStrength);
-  Serial.println(" dBm");
-  
-  Serial.println("===================");
+  Serial.println("┌─── Sensor Readings ───────────────┐");
+  Serial.print("│ Body Temp:    "); Serial.print(currentData.bodyTemperature, 1); Serial.println(" °F");
+  Serial.print("│ Ambient Temp: "); Serial.print(currentData.ambientTemperature, 1); Serial.println(" °F");
+  Serial.print("│ Humidity:     "); Serial.print(currentData.humidity, 1); Serial.println(" %");
+  Serial.print("│ Heart Rate:   "); Serial.print(currentData.heartRate); Serial.println(" BPM");
+  Serial.print("│ Steps/min:    "); Serial.print(currentData.stepsPerMinute); Serial.println();
+  Serial.print("│ Activity:     "); Serial.print(currentData.activityIntensity, 2); Serial.println(" m/s²");
+  Serial.print("│ Battery:      "); Serial.print(currentData.batteryLevel); Serial.println(" %");
+  Serial.print("│ WiFi Signal:  "); Serial.print(currentData.signalStrength); Serial.println(" dBm");
+  Serial.println("└───────────────────────────────────┘");
 }

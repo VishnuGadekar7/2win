@@ -15,7 +15,7 @@ export default function RegisterPage() {
   const [status, setStatus] = useState<"success" | "error" | null>(null);
 
   //const RENDER_API_BASE_URL = "https://twowin-8mg4.onrender.com";
-  const RENDER_API_BASE_URL = "http://localhost:8000";
+  const RENDER_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,129 +87,146 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 flex items-center justify-center p-8">
-      <div className="w-full max-w-md glass rounded-3xl p-8 shadow-2xl">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-black gradient-text mb-3">2win</h1>
-          <p className="text-slate-400 text-lg">Create your account</p>
+    <main className="min-h-screen bg-[hsl(260_10%_4%)] text-foreground flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute inset-0 pointer-events-none -z-10">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="w-full max-w-lg glass rounded-[2rem] p-8 md:p-10 shadow-[0_40px_100px_rgba(0,0,0,0.5)] border-white/5 relative z-10 my-6 transition-all">
+        <div className="text-center mb-10">
+          <div className="relative group inline-block">
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+            <div className="relative w-10 h-10 bg-primary rounded-xl flex items-center justify-center font-black text-background mx-auto mb-4 shadow-[0_0_30px_rgba(var(--primary),0.4)]">
+              2
+            </div>
+          </div>
+          <h1 className="text-3xl font-black text-white tracking-tighter mb-2">Join Nexus</h1>
+          <p className="text-foreground/40 font-bold uppercase tracking-widest text-[9px]">Initialize Your Health Twin</p>
         </div>
 
         {message && (
           <div
-            className={`p-4 rounded-2xl mb-6 flex items-center space-x-3 ${status === "success"
-              ? "bg-emerald-900/50 border border-emerald-500/50 text-emerald-200"
-              : "bg-red-900/50 border border-red-500/50 text-red-200"
+            className={`p-4 rounded-xl mb-8 flex items-center space-x-3 text-[10px] font-black uppercase tracking-widest animate-fade-in ${status === "success"
+              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+              : "bg-red-500/10 border border-red-500/20 text-red-400"
               }`}
           >
+            <div className={`w-1.5 h-1.5 rounded-full ${status === "success" ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
             <span>{message}</span>
           </div>
         )}
 
         <form onSubmit={handleRegister} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              placeholder="john@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-              required
-            />
-
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
                 Full Name
               </label>
               <input
                 type="text"
+                placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-                placeholder="Enter your full name"
+                className="w-full px-5 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 focus:outline-none focus:border-primary/50 transition-all font-medium text-sm"
                 required
               />
             </div>
-
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Password
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
+                Email Address
               </label>
               <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-                placeholder="Enter your password"
-                minLength={8}
+                type="email"
+                placeholder="name@nexus.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-5 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 focus:outline-none focus:border-primary/50 transition-all font-medium text-sm"
                 required
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                Password must be at least 8 characters long
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Height (cm)
-              </label>
-              <input
-                type="number"
-                placeholder="175"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Weight (kg)
-              </label>
-              <input
-                type="number"
-                placeholder="70"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Age
+          <div className="space-y-2">
+            <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
+              Secure Access Key
             </label>
             <input
-              type="number"
-              placeholder="35"
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-800/70 border border-slate-600 rounded-2xl text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500"
+              type="password"
+              placeholder="Entropy level: High"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-5 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 focus:outline-none focus:border-primary/50 transition-all font-medium text-sm"
+              minLength={8}
+              required
             />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
+                Height
+              </label>
+              <input
+                type="number"
+                placeholder="cm"
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+                className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 focus:outline-none focus:border-primary/50 transition-all font-medium text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
+                Weight
+              </label>
+              <input
+                type="number"
+                placeholder="kg"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 focus:outline-none focus:border-primary/50 transition-all font-medium text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-foreground/30">
+                Age
+              </label>
+              <input
+                type="number"
+                placeholder="yr"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-white/5 focus:outline-none focus:border-primary/50 transition-all font-medium text-sm"
+              />
+            </div>
           </div>
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold py-4 px-8 rounded-2xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all text-lg disabled:opacity-50"
             disabled={loading}
+            className="w-full bg-primary hover:bg-primary/90 text-background font-black py-4 px-8 rounded-xl shadow-[0_15px_30px_rgba(var(--primary),0.15)] hover:shadow-[0_20px_40px_rgba(var(--primary),0.25)] transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 mt-4 text-[10px] uppercase tracking-widest"
           >
-            {loading ? "Creating Account..." : "Create Account"}
+            {loading ? (
+              <span className="flex items-center justify-center gap-3">
+                <div className="w-3.5 h-3.5 border-2 border-background/30 border-t-background rounded-full animate-spin" />
+                Initializing...
+              </span>
+            ) : (
+              "Complete Initialization"
+            )}
           </button>
         </form>
 
-        <p className="text-center mt-6 text-slate-400">
-          Already have an account?{" "}
-          <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-medium">
-            Sign in
+        <div className="mt-8 text-center text-[10px]">
+          <span className="text-foreground/30 font-bold uppercase tracking-widest">Already a member?</span>{" "}
+          <Link href="/login" className="text-primary font-black uppercase tracking-widest hover:underline underline-offset-4 decoration-2">
+            Sign In Here
           </Link>
-        </p>
+        </div>
 
-        <p className="text-xs text-slate-500 text-center mt-8">
-          Backend: https://twowin-8mg4.onrender.com • Day 1 MVP • Team Nodemons
+        <p className="text-[9px] uppercase tracking-[0.4em] text-foreground/20 font-black text-center mt-10">
+          Nexus Infrastructure • Team Nodemon
         </p>
       </div>
     </main>

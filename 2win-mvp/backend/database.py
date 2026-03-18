@@ -148,5 +148,62 @@ class Database:
         response = self.supabase.table("medical_alerts").update({"read": True}).eq("user_id", user_id).in_("id", alert_ids).execute()
         return hasattr(response, "data") and response.data
 
+    # Get body parts status for a user
+    async def get_body_parts_status(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get body parts status for digital twin visualization"""
+        response = self.supabase.table("body_parts_status").select("*").eq("user_id", user_id).execute()
+        if hasattr(response, "data") and response.data:
+            return response.data
+        return []
+
+    # Upsert body part status
+    async def upsert_body_part_status(self, status_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Insert or update body part status"""
+        response = self.supabase.table("body_parts_status").upsert(
+            status_data, on_conflict="user_id,body_part"
+        ).execute()
+        if hasattr(response, "data") and response.data:
+            return response.data[0]
+        return {}
+
+    # Get device by UID
+    async def get_device_by_uid(self, device_uid: str) -> Optional[Dict[str, Any]]:
+        """Get device record by device_uid"""
+        response = self.supabase.table("devices").select("*").eq("device_uid", device_uid).single().execute()
+        if hasattr(response, "data") and response.data:
+            return response.data
+        return None
+
+    # Insert a single reading (alias for create_reading for clarity)
+    async def insert_reading(self, device_id: str, user_id: str, metric: str, value: float, unit: str = "") -> Dict[str, Any]:
+        """Insert a single sensor reading"""
+        from datetime import datetime
+        reading_data = {
+            "device_id": device_id,
+            "user_id": user_id,
+            "metric": metric,
+            "value": value,
+            "unit": unit,
+            "ts": datetime.utcnow().isoformat()
+        }
+        return await self.create_reading(reading_data)
+
+    # Insert a prediction
+    async def insert_prediction(self, user_id: str, prediction_type: str, value: float,
+                                 model_version: str = "rule-v1", confidence: float = 0.7,
+                                 explanation: dict = None) -> Dict[str, Any]:
+        """Insert a prediction record"""
+        from datetime import datetime
+        prediction_data = {
+            "user_id": user_id,
+            "prediction_type": prediction_type,
+            "value": value,
+            "model_version": model_version,
+            "confidence": confidence,
+            "explanation": explanation or {},
+            "ts": datetime.utcnow().isoformat()
+        }
+        return await self.create_prediction(prediction_data)
+
 # Create a global DB instance
 db = Database()
