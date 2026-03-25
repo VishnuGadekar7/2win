@@ -41,3 +41,5 @@ npm-debug.log*
 # Distribution
 dist/
 *.egg-info/
+
+2win-mvp/backend/__pycache__

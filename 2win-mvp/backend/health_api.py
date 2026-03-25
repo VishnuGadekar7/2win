@@ -86,32 +86,72 @@ async def get_body_scan(current_user: Dict = Depends(get_current_user)):
 
 
 @router.get("/predictions")
-async def get_predictions(current_user: Dict = Depends(get_current_user)):
-    """Get latest disease risk predictions."""
+async def get_predictions(current_user: dict = Depends(get_current_user)):
+    """Get latest disease risk predictions, padded with placeholders for missing data."""
     user_id = current_user.get("user_id")
-    predictions = await db.get_latest_predictions(user_id, limit=10)
+    
+    # Define the required keys that frontend expects
+    REQUIRED_KEYS = [
+        "cvd", 
+        "sleep_apnea", 
+        "hypertension", 
+        "diabetes", 
+        "fatigue", 
+        "vitality_index"
+    ]
 
-    if not predictions:
-        return []
+    # Fetch data from DB
+    db_predictions = await db.get_latest_predictions(user_id, limit=50)
+    
+    # Convert fetched list into a dictionary for instant lookups
+    # (If your DB query already deduplicates, this just maps them by type)
+    existing_preds = {}
+    if db_predictions:
+        for p in db_predictions:
+            p_type = p.get("prediction_type")
+            if p_type and p_type not in existing_preds:
+                existing_preds[p_type] = p
 
-    # Format for frontend
+    # Build the final array, guaranteeing every required key exists
     result = []
-    for p in predictions:
-        result.append({
-            "prediction_type": p.get("prediction_type", ""),
-            "disease": p.get("prediction_type", "").replace("_", " ").title(),
-            "risk": p.get("value", 0),
-            "value": p.get("value", 0),
-            "confidence": p.get("confidence", 0),
-            "level": p.get("explanation", {}).get("risk_level", "MODERATE"),
-            "factors": [f.get("name", "") for f in p.get("explanation", {}).get("main_factors", [])],
-            "recommendations": p.get("explanation", {}).get("recommendations", []),
-            "explanation": p.get("explanation", {}),
-            "timestamp": p.get("ts"),
-        })
+    for req_key in REQUIRED_KEYS:
+        if req_key in existing_preds:
+            p = existing_preds[req_key]
+            
+            raw_factors = [f.get("name", "") for f in p.get("explanation", {}).get("main_factors", [])]
+            raw_recommendations = p.get("explanation", {}).get("recommendations", [])
+            
+            clean_factors = list(dict.fromkeys([f for f in raw_factors if f]))
+            clean_recommendations = list(dict.fromkeys([r for r in raw_recommendations if r]))
+
+            result.append({
+                "prediction_type": req_key,
+                "disease": req_key.replace("_", " ").title(),
+                "risk": p.get("value", 0),
+                "value": p.get("value", 0),
+                "confidence": p.get("confidence", 0),
+                "level": p.get("explanation", {}).get("risk_level", "MODERATE"),
+                "factors": clean_factors,
+                "recommendations": clean_recommendations,
+                "explanation": p.get("explanation", {}),
+                "timestamp": p.get("ts"),
+            })
+        else:
+            # Missing data! Inject a safe placeholder.
+            result.append({
+                "prediction_type": req_key,
+                "disease": req_key.replace("_", " ").title(),
+                "risk": 0.0,
+                "value": 0.0,
+                "confidence": 0.0,
+                "level": "AWAITING DATA",
+                "factors": ["Gathering telemetry data..."],
+                "recommendations": ["Wear your ESP32 device longer to generate this insight."],
+                "explanation": {},
+                "timestamp": None,
+            })
 
     return result
-
 
 @router.get("/alerts")
 async def get_alerts(current_user: Dict = Depends(get_current_user)):

@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from database import db
 from auth import get_current_user
+from device_api import hash_device_key
 
 router = APIRouter(prefix="/api/iot", tags=["IoT"])
 
@@ -74,8 +75,11 @@ async def batch_ingest(
     Batch ingestion from ESP32 devices.
     Validates device key, writes readings to DB, triggers prediction pipeline.
     """
+    # Hash the raw key coming from the ESP32
+    hashed_key = hash_device_key(payload.device_key)
+
     # Validate device key
-    device_info = await db.validate_device_key(payload.device_key)
+    device_info = await db.validate_device_key(hashed_key)
     if not device_info:
         raise HTTPException(status_code=401, detail="Invalid or revoked device key")
 

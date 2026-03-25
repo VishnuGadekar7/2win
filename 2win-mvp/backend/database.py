@@ -80,13 +80,21 @@ class Database:
     
     async def validate_device_key(self, key_hash: str) -> Optional[Dict[str, Any]]:
         """Validate a device key and return device info"""
+        
+        # Use .execute() which will return a list of rows (either empty or containing 1 row).
         response = self.supabase.table("device_keys").select(
             "device_id, active, devices!inner(user_id)"
-        ).eq("key_hash", key_hash).eq("active", True).single().execute()
-        if hasattr(response, "data") and response.data:
-            return response.data
+        ).eq("key_hash", key_hash).eq("active", True).execute()
+        
+        print("device key response:", response)
+        # Check if the query was successful AND if the data array actually contains anything
+        if response and hasattr(response, "data") and len(response.data) > 0:
+            # We found the key! Return the first (and only) matching row.
+            return response.data[0]
+            
+        # If the array was empty (length 0), the key is invalid.
         return None
-    
+
     # Create a new reading
     async def create_reading(self, reading_data: Dict[str, Any]) -> Dict[str, Any]:
         response = self.supabase.table("readings").insert(reading_data).execute()
